@@ -25,5 +25,4 @@ updates:
           - "javax.servlet:*"
     ignore:
       - dependency-name: "org.codehaus.groovy:*"
-        # Jenkins is stuck on Groovy 2
-        update-types: ["version-update:semver-major"]
+        # Must be aligned with the version Jenkins uses; see comment in pom.xml.

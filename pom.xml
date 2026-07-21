@@ -79,6 +79,11 @@
             <version>1.34</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+            This must be aligned with the Groovy version that Jenkins uses.
+            To find the required version, check the groovy.version property in Jenkins' BOM:
+            https://github.com/jenkinsci/jenkins/blob/master/bom/pom.xml
+        -->
         <dependency>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
