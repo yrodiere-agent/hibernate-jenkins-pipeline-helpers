@@ -6,6 +6,7 @@ import org.jenkinsci.plugins.github_branch_source.GitHubSCMSource
 import org.jenkinsci.plugins.workflow.steps.FlowInterruptedException
 import org.jenkinsci.plugins.workflow.steps.TimeoutStepExecution
 import org.kohsuke.github.GHEvent
+import org.kohsuke.github.GHWorkflowRun
 
 def call(String approvalGroup) {
 	call(approvalGroup, [:])
@@ -162,9 +163,14 @@ private boolean doCheckGHAWorkflowRuns(Map ghConfig, String sha) {
 				.headSha(sha)
 				.event(GHEvent.PULL_REQUEST)
 				.list()
-				.withPageSize(1)
+				.withPageSize(10)
 				.iterator()
-		return iterator.hasNext()
+		while (iterator.hasNext()) {
+			if (iterator.next().getStatus() != GHWorkflowRun.Status.ACTION_REQUIRED) {
+				return true
+			}
+		}
+		return false
 	} finally {
 		Connector.release(github)
 	}
