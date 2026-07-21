@@ -24,6 +24,7 @@ import org.kohsuke.github.GHCommitPointer
 import org.kohsuke.github.GHEvent
 import org.kohsuke.github.GHPullRequest
 import org.kohsuke.github.GHRepository
+import org.kohsuke.github.GHWorkflowRun
 import org.kohsuke.github.GHWorkflowRunQueryBuilder
 import org.kohsuke.github.GitHub
 import org.kohsuke.github.PagedIterable
@@ -128,6 +129,12 @@ class RequireApprovalForPullRequestGHADeclarativeTest extends DeclarativePipelin
 		when(mockPagedIterable.iterator()).thenReturn(mockIterator)
 	}
 
+	private GHWorkflowRun mockWorkflowRun(GHWorkflowRun.Status status) {
+		def run = mock(GHWorkflowRun)
+		when(run.getStatus()).thenReturn(status)
+		return run
+	}
+
 	private void setupPRBuild() {
 		addEnvVar('CHANGE_AUTHOR', 'foo')
 		addEnvVar('CHANGE_ID', '42')
@@ -153,7 +160,9 @@ class RequireApprovalForPullRequestGHADeclarativeTest extends DeclarativePipelin
 	@Test
 	void gha_alreadyApproved() throws Exception {
 		setupPRBuild()
-		when(mockIterator.hasNext()).thenReturn(true)
+		def approvedRun = mockWorkflowRun(GHWorkflowRun.Status.COMPLETED)
+		when(mockIterator.hasNext()).thenReturn(true).thenReturn(false)
+		when(mockIterator.next()).thenReturn(approvedRun)
 
 		def script = runScript(SCRIPT_NAME)
 		assertJobStatusSuccess()
@@ -162,9 +171,28 @@ class RequireApprovalForPullRequestGHADeclarativeTest extends DeclarativePipelin
 	}
 
 	@Test
+	void gha_actionRequired_notApproved() throws Exception {
+		setupPRBuild()
+		def pendingRun = mockWorkflowRun(GHWorkflowRun.Status.ACTION_REQUIRED)
+		when(mockIterator.hasNext()).thenReturn(true).thenReturn(false)
+		when(mockIterator.next()).thenReturn(pendingRun)
+
+		helper.registerAllowedMethod("timeout", [Map, Closure], { Map params, Closure body ->
+			body()
+		})
+
+		def script = runScript(SCRIPT_NAME)
+		assertJobStatusSuccess()
+		assertCallStack().doesNotContain('Approved: GitHub Actions workflow runs found')
+		assertCallStack().contains('Approved: manual approval on Jenkins')
+	}
+
+	@Test
 	void gha_approvedAfterFirstPoll() throws Exception {
 		setupPRBuild()
-		when(mockIterator.hasNext()).thenReturn(false).thenReturn(true)
+		def approvedRun = mockWorkflowRun(GHWorkflowRun.Status.IN_PROGRESS)
+		when(mockIterator.hasNext()).thenReturn(false).thenReturn(true).thenReturn(false)
+		when(mockIterator.next()).thenReturn(approvedRun)
 
 		helper.registerAllowedMethod("timeout", [Map, Closure], { Map params, Closure body ->
 			throw new FlowInterruptedException(
@@ -324,8 +352,11 @@ class RequireApprovalForPullRequestGHADeclarativeTest extends DeclarativePipelin
 			checkCallCount++
 			if (checkCallCount == 1) return false
 			if (checkCallCount == 2) throw new IOException("transient error")
-			return true
+			if (checkCallCount == 3) return true
+			return false
 		})
+		def approvedRun = mockWorkflowRun(GHWorkflowRun.Status.COMPLETED)
+		when(mockIterator.next()).thenReturn(approvedRun)
 
 		def timeoutCallCount = 0
 		helper.registerAllowedMethod("timeout", [Map, Closure], { Map params, Closure body ->
